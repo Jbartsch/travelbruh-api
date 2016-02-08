@@ -6,8 +6,8 @@
 
 namespace Drupal\geolocation;
 
-use Drupal\Core\Extension\ModuleHandler;
-use Drupal\Core\Entity\EntityManager;
+use Drupal\Core\Entity\EntityManagerInterface;
+use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\field\FieldStorageConfigInterface;
 
@@ -38,7 +38,7 @@ class GeolocationCore {
   /**
    * Constructor.
    */
-  public function __construct(ModuleHandler $module_handler, EntityManager $entity_manager) {
+  public function __construct(ModuleHandlerInterface $module_handler, EntityManagerInterface $entity_manager) {
     $this->module_handler = $module_handler;
     $this->entity_manager = $entity_manager;
   }
@@ -78,12 +78,15 @@ class GeolocationCore {
 
       $args = ['@field_name' => $field_storage->getName()];
 
+      $target_entity_type = \Drupal::entityManager()->getDefinition($field_storage->getTargetEntityTypeId());
+      $field_coordinates_table_data = $data[$target_entity_type->getBaseTable() . '__' . $field_storage->getName()][$field_storage->getName()];
+
       // Add proximity handlers.
       $data[$table_name][$args['@field_name'] . '_proximity'] = [
         'group' => 'Content',
         'title' => $this->t('Proximity (@field_name)', $args),
-        'title short' => $table_data[$args['@field_name']]['title short'] . t(":proximity"),
-        'help' => $table_data[$args['@field_name']]['help'],
+        'title short' => $field_coordinates_table_data['title short'] . t(":proximity"),
+        'help' => $field_coordinates_table_data['help'],
         'argument' => [
           'id' => 'geolocation_argument_proximity',
           'table' => $table_name,
@@ -129,9 +132,8 @@ class GeolocationCore {
             $args['@field_name'].'_lat_cos',
             $args['@field_name'].'_lng_rad',
           ],
-          'entity_tables' => $table_data[$args['@field_name']]['field']['entity_tables'],
           'element type' => 'div',
-          'is revision' => $table_data[$args['@field_name']]['field']['is revision'],
+          'is revision' => (isset($table_data[$args['@field_name']]['field']['is revision']) && $table_data[$args['@field_name']]['field']['is revision']),
           'click sortable' => TRUE,
         ],
         'sort' => [
@@ -163,6 +165,10 @@ class GeolocationCore {
     $field_latsin = "{$table_name}.{$field_id}_lat_sin";
     $field_latcos = "{$table_name}.{$field_id}_lat_cos";
     $field_lng    = "{$table_name}.{$field_id}_lng_rad";
+
+    // deg2rad() is sensitive to empty strings. Replace with integer zero.
+    $filter_lat = empty($filter_lat) ? 0 : $filter_lat;
+    $filter_lng = empty($filter_lng) ? 0 : $filter_lng;
 
     // Pre-calculate filter values.
     $filter_latcos = cos(deg2rad($filter_lat));
